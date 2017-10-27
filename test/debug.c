@@ -15,7 +15,7 @@ int make_iso_compilers_happy;
 #include <string.h>
 #include <unistd.h>
 #include "debug.h"
-#include "atari/Atari-memmap.h"
+#include "host/memmap.h"
 #include "mos6532/mos6532.h"
 
 #define MOS6502_STATUS_FLAG_NEGATIVE  0x80

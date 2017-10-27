@@ -8,7 +8,7 @@
  */
 
 #include <string.h>
-#include "mos6507/mos6507.h"
+#include "mos6502/mos6502.h"
 #include "mos6532.h"
 
 static uint8_t memory[MEM_SIZE];

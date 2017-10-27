@@ -21,7 +21,6 @@ inline void memmap_write(void)
     uint8_t data;
     mos6502_get_data_bus(&data);
     mos6502_get_address_bus(&address);
-    memmap_map_address(&address);
 
     /* Access particular device */
     if (IS_RAM(address)) mos6532_write(address - MEMMAP_RAM_START, data);
@@ -37,10 +36,9 @@ inline void memmap_read(uint8_t *data)
     /* Fetch address from CPU */
     uint16_t address;
     mos6502_get_address_bus(&address);
-    memmap_map_address(&address);
 
     /* Access particular device */
     if (IS_RAM(address)) mos6532_read(address - MEMMAP_RAM_START, data);
-    if (IS_ROM(address)) cartridge_read(address - MEMMAP_ROM_START, data);
+    if (IS_ROM(address)) program_read(address - MEMMAP_ROM_START, data);
 }
 

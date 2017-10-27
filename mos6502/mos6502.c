@@ -6,7 +6,7 @@
  * Provides implementations of the 6502 model.
  */
 
-#include "atari/Atari-memmap.h"
+#include "host/memmap.h"
 #ifdef PRINT_STATE
     #include "test/debug.h"
 #endif

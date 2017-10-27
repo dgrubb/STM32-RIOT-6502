@@ -26,7 +26,7 @@ export INCLUDES += -I$(CURDIR)
 CFLAGS += -DPRINT_STATE
 CFLAGS += -DMANUAL_STEP
 
-BIN_DIRS += atari
+BIN_DIRS += host
 BIN_DIRS += mos6502
 BIN_DIRS += mos6532
 BIN_DIRS += test
