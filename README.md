@@ -4,6 +4,8 @@ This project is a 6502 emulator specifically targeted at the STM32-F446 microcon
 
 The [RIOT OS](https://riot-os.org "RIOT OS") is used for configuring peripherals and managing device timing.
 
+![STM32-RIOT-6502 screenshot](./images/STM32-RIOT-6502.png?raw=true "STM32-RIOT-6502 screenshot")
+
 ## Prerequisites
 
 Requires an ARM toolchain:
