@@ -1,144 +1,1492 @@
 /*
- * File: mos6502-opcodes.h
+ * File: mos6502-opcodes.c
  * Author: dgrubb
  * Date: 12/20/2016
  *
  * Provides implementations of the 6502's op-codes.
- */
-
-#ifndef _MOS6502_OPCODES_H
-#define _MOS6502_OPCODES_H
-
-#include <stdint.h>
-
-/* Opcodes are 8-bit, allowing for 255 unique permutations.
- * However, many bit selections don't represent valid operations.
- */
-#define ISA_LENGTH 255
-
-typedef enum {
-    OPCODE_ADDRESSING_MODE_ACCUMULATOR = 0,
-    OPCODE_ADDRESSING_MODE_ABSOLUTE,
-    OPCODE_ADDRESSING_MODE_ABSOLUTE_X_INDEXED,
-    OPCODE_ADDRESSING_MODE_ABSOLUTE_Y_INDEXED,
-    OPCODE_ADDRESSING_MODE_IMMEDIATE,
-    OPCODE_ADDRESSING_MODE_IMPLIED,
-    OPCODE_ADDRESSING_MODE_INDIRECT,
-    OPCODE_ADDRESSING_MODE_INDIRECT_X_INDEXED,
-    OPCODE_ADDRESSING_MODE_INDIRECT_Y_INDEXED,
-    OPCODE_ADDRESSING_MODE_RELATIVE,
-    OPCODE_ADDRESSING_MODE_ZERO_PAGE,
-    OPCODE_ADDRESSING_MODE_ZERO_PAGE_X_INDEXED,
-    OPCODE_ADDRESSING_MODE_ZERO_PAGE_Y_INDEXED,
-} addressing_mode_t;
-
-/* Define a function pointer type */
-typedef int (*fp)(int, addressing_mode_t);
-
-typedef struct {
-    fp opcode;
-    addressing_mode_t addressing_mode;
-} instruction_t;
-
-extern instruction_t ISA_table[ISA_LENGTH];
-
-void opcode_populate_ISA_table(void);
-int opcode_execute(uint8_t opcode);
-
-/* The following function prototypes define each possible opcodes from a
- * 6502 with nmemonic annotation in commens. An additional opcode ILL is
- * added to handle illegal codes placed into a program but has no analogue
- * in a real 6502 device.
  *
- * Annotation derived from explanations found at:
- * http://www.dwheeler.com/6502/oneelkruns/asm1step.html
+ * Useful information about cycle execution times:
+ * http://users.telenet.be/kim1-6502/6502/hwman.html##AA
+ *
+ * Useful information about opcode logic and status flags:
+ * http://www.obelisk.me.uk/6502/reference.html
  */
 
-/* Load and store */
-int opcode_LDA(int cycle, addressing_mode_t address_mode); /* LoaD the Accumulator */
-int opcode_LDX(int cycle, addressing_mode_t address_mode); /* LoaD the X register */
-int opcode_LDY(int cycle, addressing_mode_t address_mode); /* LoaD the Y register */
-int opcode_STA(int cycle, addressing_mode_t address_mode); /* STore the Accumulator */
-int opcode_STX(int cycle, addressing_mode_t address_mode); /* STore the X register */
-int opcode_STY(int cycle, addressing_mode_t address_mode); /* STore the Y register */
+#include "host/memmap.h"
+#include "mos6502.h"
+#include "mos6502-opcodes.h"
+#include "mos6502-microcode.h"
+#include "mos6502-addressing-macros.h"
 
-/* Arithmetic */
-int opcode_ADC(int cycle, addressing_mode_t address_mode); /* ADd to Accumulator with Carry */
-int opcode_SBC(int cycle, addressing_mode_t address_mode); /* SuBtract from accumulator with Carry*/
-
-/* Increment and decrement */
-int opcode_INC(int cycle, addressing_mode_t address_mode); /* INCrement memory by one */
-int opcode_INX(int cycle, addressing_mode_t address_mode); /* INcrement X by one */
-int opcode_INY(int cycle, addressing_mode_t address_mode); /* INcrement Y by one */
-int opcode_DEC(int cycle, addressing_mode_t address_mode); /* DECrement memory by one */
-int opcode_DEX(int cycle, addressing_mode_t address_mode); /* DEcrement X by one */
-int opcode_DEY(int cycle, addressing_mode_t address_mode); /* DEcrement Y by one */
-
-/* Logical */
-int opcode_AND(int cycle, addressing_mode_t address_mode); /* AND memowry with accumulator */
-int opcode_ORA(int cycle, addressing_mode_t address_mode); /* OR memory with Accumulator */
-int opcode_EOR(int cycle, addressing_mode_t address_mode); /* Exclusive-OR memory with accumulator */
-
-/* Jump, branch, compare and test */
-int opcode_JMP(int cycle, addressing_mode_t address_mode); /* JuMP to another location (GOTO) */
-int opcode_BCC(int cycle, addressing_mode_t address_mode); /* Branch on Carry Clear */
-int opcode_BCS(int cycle, addressing_mode_t address_mode); /* Branch on Carry Set */
-int opcode_BEQ(int cycle, addressing_mode_t address_mode); /* Branch on EQual to zero */
-int opcode_BNE(int cycle, addressing_mode_t address_mode); /* Branch on Not Equal to zero */
-int opcode_BMI(int cycle, addressing_mode_t address_mode); /* Branch on MInus */
-int opcode_BPL(int cycle, addressing_mode_t address_mode); /* Branch on PLus */
-int opcode_BVS(int cycle, addressing_mode_t address_mode); /* Branch on oVerflow Set */
-int opcode_BVC(int cycle, addressing_mode_t address_mode); /* Branch on oVerflow clear */
-int opcode_CMP(int cycle, addressing_mode_t address_mode); /* CoMPare memory and accumulator */
-int opcode_CPX(int cycle, addressing_mode_t address_mode); /* ComPare memory and X */
-int opcode_CPY(int cycle, addressing_mode_t address_mode); /* ComPare memory and Y*/
-int opcode_BIT(int cycle, addressing_mode_t address_mode); /* Test BITs */
-
-/* Shift and rotate */
-int opcode_ASL(int cycle, addressing_mode_t address_mode); /* Accumulator Shift Left */
-int opcode_LSR(int cycle, addressing_mode_t address_mode); /* Logical Shift Right */
-int opcode_ROL(int cycle, addressing_mode_t address_mode); /* ROtate Left */
-int opcode_ROR(int cycle, addressing_mode_t address_mode); /* ROtate Right */
-
-/* Transfer */
-int opcode_TAX(int cycle, addressing_mode_t address_mode); /* Transfer Accumulator to X */
-int opcode_TAY(int cycle, addressing_mode_t address_mode); /* Transfer Accumulator to Y */
-int opcode_TXA(int cycle, addressing_mode_t address_mode); /* Transfer X to Accumulator */
-int opcode_TYA(int cycle, addressing_mode_t address_mode); /* Transfer Y to Accumulator */
-
-/* Stack */
-int opcode_TSX(int cycle, addressing_mode_t address_mode); /* Transfer Stack pointer to X */
-int opcode_TXS(int cycle, addressing_mode_t address_mode); /* Transfer X to Stack pointer */
-int opcode_PHA(int cycle, addressing_mode_t address_mode); /* PusH Accumulator on stack */
-int opcode_PHP(int cycle, addressing_mode_t address_mode); /* PusH Processor status on stack */
-int opcode_PLA(int cycle, addressing_mode_t address_mode); /* PulL Accumulator from stack */
-int opcode_PLP(int cycle, addressing_mode_t address_mode); /* PulL Processor status from stack */
-
-/* Subroutine */
-int opcode_JSR(int cycle, addressing_mode_t address_mode); /* Jump to SubRoutine */
-int opcode_RTS(int cycle, addressing_mode_t address_mode); /* ReTurn from Subroutine */
-int opcode_RTI(int cycle, addressing_mode_t address_mode); /* ReTurn from Interrupt */
-
-/* Set and reset */
-int opcode_CLC(int cycle, addressing_mode_t address_mode); /* CLear Carry flag */
-int opcode_CLD(int cycle, addressing_mode_t address_mode); /* CLear Decimal mode */
-int opcode_CLI(int cycle, addressing_mode_t address_mode); /* CLear Interrupt disable */
-int opcode_CLV(int cycle, addressing_mode_t address_mode); /* CLear oVerflow flag */
-
-int opcode_SEC(int cycle, addressing_mode_t address_mode); /* SEt Carry */
-int opcode_SED(int cycle, addressing_mode_t address_mode); /* SEt Decimal mode */
-int opcode_SEI(int cycle, addressing_mode_t address_mode); /* SEt Interrupt disable */
-
-/* Miscellaneous */
-int opcode_NOP(int cycle, addressing_mode_t address_mode); /* No OPeration */
-int opcode_BRK(int cycle, addressing_mode_t address_mode); /* BReaK */
-
-/* This is part of the program logic rather than the 6502 model. It
- * provides a sink when illegal opcodes are invoked. Further work
- * could include fleshing out the illegal opcodes with their real-world
- * actions depending on which specific 6502 implementation is being
- * emulated?
+/* Invoked at the end of each op-code. Resets the
+ * clock cycle counter and increments the PC and 
+ * address busses for the next op-code
  */
-int opcode_ILL(int cycle, addressing_mode_t address_mode); /* Illegal */
+#define END_OPCODE() \
+    mos6502_increment_PC(); \
+    mos6502_set_address_bus(mos6502_get_PC());
 
-#endif /* _MOS6502_OPCODES_H */
+#define STACK_PAGE 0x01
+
+instruction_t ISA_table[ISA_LENGTH];
+
+/* Looks up an instruction from the instruction table and
+ * executes the corresponding function, passing along cycle
+ * time and addressing mode.
+ *
+ * opcode: value of the instruction, e.g., 0x00 for BRK
+ */
+inline int opcode_execute(uint8_t opcode)
+{
+    static int cycle = 0;
+    if (-1 == ISA_table[opcode].opcode(cycle, ISA_table[opcode].addressing_mode)) {
+        cycle++;
+    } else {
+        cycle = 0;
+    }
+    return cycle;
+}
+
+/* Loads an array with function pointers to the corresponding
+ * instruction. E.g., LDY is 0x0C so index 12 of the ISA table
+ * would be loaded with a pointer to function opcode_LDY().
+ */
+void opcode_populate_ISA_table(void)
+{
+    int i = 0;
+    /* Initially, fill the entire table with ILL */
+    for (i=0; i<ISA_LENGTH; i++) {
+        ISA_table[i].opcode = opcode_ILL;
+        ISA_table[i].addressing_mode = OPCODE_ADDRESSING_MODE_IMPLIED;
+    }
+
+    /* Now fill out the actual codes supported by a real 6502 */
+
+    /* 0x00: BRK, Implied */
+    ISA_table[0x00].opcode = opcode_BRK;
+    ISA_table[0x00].addressing_mode = OPCODE_ADDRESSING_MODE_IMPLIED;
+
+    /* Load accumulator with memory */
+    ISA_table[0xA9].opcode = opcode_LDA;
+    ISA_table[0xA9].addressing_mode = OPCODE_ADDRESSING_MODE_IMMEDIATE;
+    ISA_table[0xA5].opcode = opcode_LDA;
+    ISA_table[0xA5].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE;
+    ISA_table[0xB5].opcode = opcode_LDA;
+    ISA_table[0xB5].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE_X_INDEXED;
+    ISA_table[0xAD].opcode = opcode_LDA;
+    ISA_table[0xAD].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE;
+    ISA_table[0xBD].opcode = opcode_LDA;
+    ISA_table[0xBD].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE_X_INDEXED;
+    ISA_table[0xB9].opcode = opcode_LDA;
+    ISA_table[0xB9].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE_Y_INDEXED;
+    ISA_table[0xA1].opcode = opcode_LDA;
+    ISA_table[0xA1].addressing_mode = OPCODE_ADDRESSING_MODE_INDIRECT_X_INDEXED;
+    ISA_table[0xB1].opcode = opcode_LDA;
+    ISA_table[0xB1].addressing_mode = OPCODE_ADDRESSING_MODE_INDIRECT_Y_INDEXED;
+
+    /* Load Index X with memory */
+    ISA_table[0xA2].opcode = opcode_LDX;
+    ISA_table[0xA2].addressing_mode = OPCODE_ADDRESSING_MODE_IMMEDIATE;
+    ISA_table[0xA6].opcode = opcode_LDX;
+    ISA_table[0xA6].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE;
+    ISA_table[0xB6].opcode = opcode_LDX;
+    ISA_table[0xB6].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE_Y_INDEXED;
+    ISA_table[0xAE].opcode = opcode_LDX;
+    ISA_table[0xAE].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE;
+    ISA_table[0xBE].opcode = opcode_LDX;
+    ISA_table[0xBE].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE_Y_INDEXED;
+
+    /* Load Index Y with memory */
+    ISA_table[0xA0].opcode = opcode_LDY;
+    ISA_table[0xA0].addressing_mode = OPCODE_ADDRESSING_MODE_IMMEDIATE;
+    ISA_table[0xA4].opcode = opcode_LDY;
+    ISA_table[0xA4].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE;
+    ISA_table[0xB4].opcode = opcode_LDY;
+    ISA_table[0xB4].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE_X_INDEXED;
+    ISA_table[0xAC].opcode = opcode_LDY;
+    ISA_table[0xAC].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE;
+    ISA_table[0xBC].opcode = opcode_LDY;
+    ISA_table[0xBC].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE_X_INDEXED;
+
+    /* Store Accumulator in memory */
+    ISA_table[0x85].opcode = opcode_STA;
+    ISA_table[0x85].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE;
+    ISA_table[0x95].opcode = opcode_STA;
+    ISA_table[0x95].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE_X_INDEXED;
+    ISA_table[0x8D].opcode = opcode_STA;
+    ISA_table[0x8D].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE;
+    ISA_table[0x9D].opcode = opcode_STA;
+    ISA_table[0x9D].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE_X_INDEXED;
+    ISA_table[0x99].opcode = opcode_STA;
+    ISA_table[0x99].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE_Y_INDEXED;
+    ISA_table[0x81].opcode = opcode_STA;
+    ISA_table[0x81].addressing_mode = OPCODE_ADDRESSING_MODE_INDIRECT_X_INDEXED;
+    ISA_table[0x91].opcode = opcode_STA;
+    ISA_table[0x91].addressing_mode = OPCODE_ADDRESSING_MODE_INDIRECT_Y_INDEXED;
+
+    /* Store Index X in memory */
+    ISA_table[0x86].opcode = opcode_STX;
+    ISA_table[0x86].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE;
+    ISA_table[0x96].opcode = opcode_STX;
+    ISA_table[0x96].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE_Y_INDEXED;
+    ISA_table[0x8E].opcode = opcode_STX;
+    ISA_table[0x8E].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE;
+
+    /* Store Index Y in memory */
+    ISA_table[0x84].opcode = opcode_STY;
+    ISA_table[0x84].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE;
+    ISA_table[0x94].opcode = opcode_STY;
+    ISA_table[0x94].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE_X_INDEXED;
+    ISA_table[0x8C].opcode = opcode_STY;
+    ISA_table[0x8C].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE;
+
+    /* Add memory to Accumulator with carry */
+    ISA_table[0x69].opcode = opcode_ADC;
+    ISA_table[0x69].addressing_mode = OPCODE_ADDRESSING_MODE_IMMEDIATE;
+    ISA_table[0x65].opcode = opcode_ADC;
+    ISA_table[0x65].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE;
+    ISA_table[0x75].opcode = opcode_ADC;
+    ISA_table[0x75].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE_X_INDEXED;
+    ISA_table[0x6D].opcode = opcode_ADC;
+    ISA_table[0x6D].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE;
+    ISA_table[0x7D].opcode = opcode_ADC;
+    ISA_table[0x7D].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE_X_INDEXED;
+    ISA_table[0x79].opcode = opcode_ADC;
+    ISA_table[0x79].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE_Y_INDEXED;
+    ISA_table[0x61].opcode = opcode_ADC;
+    ISA_table[0x61].addressing_mode = OPCODE_ADDRESSING_MODE_INDIRECT_X_INDEXED;
+    ISA_table[0x71].opcode = opcode_ADC;
+    ISA_table[0x71].addressing_mode = OPCODE_ADDRESSING_MODE_INDIRECT_Y_INDEXED;
+
+    /* Subtract memory from Accumulator with borrow */
+    ISA_table[0xE9].opcode = opcode_SBC;
+    ISA_table[0xE9].addressing_mode = OPCODE_ADDRESSING_MODE_IMMEDIATE;
+    ISA_table[0xE5].opcode = opcode_SBC;
+    ISA_table[0xE5].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE;
+    ISA_table[0xF5].opcode = opcode_SBC;
+    ISA_table[0xF5].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE_X_INDEXED;
+    ISA_table[0xED].opcode = opcode_SBC;
+    ISA_table[0xED].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE;
+    ISA_table[0xFD].opcode = opcode_SBC;
+    ISA_table[0xFD].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE_X_INDEXED;
+    ISA_table[0xF9].opcode = opcode_SBC;
+    ISA_table[0xF9].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE_Y_INDEXED;
+    ISA_table[0xE1].opcode = opcode_SBC;
+    ISA_table[0xE1].addressing_mode = OPCODE_ADDRESSING_MODE_INDIRECT_X_INDEXED;
+    ISA_table[0xF1].opcode = opcode_SBC;
+    ISA_table[0xF1].addressing_mode = OPCODE_ADDRESSING_MODE_INDIRECT_Y_INDEXED;
+
+    /* Increment memory by one */
+    ISA_table[0xE6].opcode = opcode_INC;
+    ISA_table[0xE6].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE;
+    ISA_table[0xF6].opcode = opcode_INC;
+    ISA_table[0xF6].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE_X_INDEXED;
+    ISA_table[0xEE].opcode = opcode_INC;
+    ISA_table[0xEE].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE;
+    ISA_table[0xFE].opcode = opcode_INC;
+    ISA_table[0xFE].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE_X_INDEXED;
+
+    /* Increment Index X by one */
+    ISA_table[0xE8].opcode = opcode_INX;
+    ISA_table[0xE8].addressing_mode = OPCODE_ADDRESSING_MODE_IMPLIED;
+
+    /* Increment Index Y by one */
+    ISA_table[0xC8].opcode = opcode_INY;
+    ISA_table[0xC8].addressing_mode = OPCODE_ADDRESSING_MODE_IMPLIED;
+
+    /* Decrement memory by one */
+    ISA_table[0xC6].opcode = opcode_DEC;
+    ISA_table[0xC6].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE;
+    ISA_table[0xD6].opcode = opcode_DEC;
+    ISA_table[0xD6].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE_X_INDEXED;
+    ISA_table[0xCE].opcode = opcode_DEC;
+    ISA_table[0xCE].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE;
+    ISA_table[0xDE].opcode = opcode_DEC;
+    ISA_table[0xDE].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE_X_INDEXED;
+
+    /* Decrement Index X by one */
+    ISA_table[0xCA].opcode = opcode_DEX;
+    ISA_table[0xCA].addressing_mode = OPCODE_ADDRESSING_MODE_IMPLIED;
+
+    /* Decrement Index Y by one */
+    ISA_table[0x88].opcode = opcode_DEY;
+    ISA_table[0x88].addressing_mode = OPCODE_ADDRESSING_MODE_IMPLIED;
+
+    /* Jump to new location */
+    ISA_table[0x4C].opcode = opcode_JMP;
+    ISA_table[0x4c].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE;
+    ISA_table[0x6C].opcode = opcode_JMP;
+    ISA_table[0x6C].addressing_mode = OPCODE_ADDRESSING_MODE_INDIRECT;
+
+    /* Branch on carry clear */
+    ISA_table[0x90].opcode = opcode_BCC;
+    ISA_table[0x90].addressing_mode = OPCODE_ADDRESSING_MODE_RELATIVE;
+
+    /* Branch on carry set */
+    ISA_table[0xB0].opcode = opcode_BCS;
+    ISA_table[0xB0].addressing_mode = OPCODE_ADDRESSING_MODE_RELATIVE;
+
+    /* Branch on result zero */
+    ISA_table[0xF0].opcode = opcode_BEQ;
+    ISA_table[0xF0].addressing_mode = OPCODE_ADDRESSING_MODE_RELATIVE;
+
+    /* Branch on result not zero */
+    ISA_table[0xD0].opcode = opcode_BNE;
+    ISA_table[0xD0].addressing_mode = OPCODE_ADDRESSING_MODE_RELATIVE;
+
+    /* Branch on result not zero */
+    ISA_table[0x30].opcode = opcode_BMI;
+    ISA_table[0x30].addressing_mode = OPCODE_ADDRESSING_MODE_RELATIVE;
+
+    /* Branch on result plus */
+    ISA_table[0x10].opcode = opcode_BPL;
+    ISA_table[0x10].addressing_mode = OPCODE_ADDRESSING_MODE_RELATIVE;
+
+    /* Branch on overflow set */
+    ISA_table[0x70].opcode = opcode_BVS;
+    ISA_table[0x70].addressing_mode = OPCODE_ADDRESSING_MODE_RELATIVE;
+
+    /* Branch on overflow clear */
+    ISA_table[0x50].opcode = opcode_BVC;
+    ISA_table[0x50].addressing_mode = OPCODE_ADDRESSING_MODE_RELATIVE;
+
+    /* Compare with Accumulator*/
+    ISA_table[0xC9].opcode = opcode_CMP;
+    ISA_table[0xC9].addressing_mode = OPCODE_ADDRESSING_MODE_IMMEDIATE;
+    ISA_table[0xC5].opcode = opcode_CMP;
+    ISA_table[0xC5].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE;
+    ISA_table[0xD5].opcode = opcode_CMP;
+    ISA_table[0xD5].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE_X_INDEXED;
+    ISA_table[0xCD].opcode = opcode_CMP;
+    ISA_table[0xCD].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE;
+    ISA_table[0xDD].opcode = opcode_CMP;
+    ISA_table[0xDD].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE_X_INDEXED;
+    ISA_table[0xD9].opcode = opcode_CMP;
+    ISA_table[0xD9].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE_Y_INDEXED;
+    ISA_table[0xC1].opcode = opcode_CMP;
+    ISA_table[0xC1].addressing_mode = OPCODE_ADDRESSING_MODE_INDIRECT_X_INDEXED;
+    ISA_table[0xD1].opcode = opcode_CMP;
+    ISA_table[0xD1].addressing_mode = OPCODE_ADDRESSING_MODE_INDIRECT_Y_INDEXED;
+
+    /* Compare memory with Index X */
+    ISA_table[0xE0].opcode = opcode_CPX;
+    ISA_table[0xE0].addressing_mode = OPCODE_ADDRESSING_MODE_IMMEDIATE;
+    ISA_table[0xE4].opcode = opcode_CPX;
+    ISA_table[0xE4].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE;
+    ISA_table[0xEC].opcode = opcode_CPX;
+    ISA_table[0xEC].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE;
+
+    /* Compare memory with Index Y */
+    ISA_table[0xC0].opcode = opcode_CPY;
+    ISA_table[0xC0].addressing_mode = OPCODE_ADDRESSING_MODE_IMMEDIATE;
+    ISA_table[0xC4].opcode = opcode_CPY;
+    ISA_table[0xC4].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE;
+    ISA_table[0xCC].opcode = opcode_CPY;
+    ISA_table[0xCC].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE;
+
+    /* Test bits in memory with Accumulator */
+    ISA_table[0x24].opcode = opcode_BIT;
+    ISA_table[0x24].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE;
+    ISA_table[0x2C].opcode = opcode_BIT;
+    ISA_table[0x2C].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE;
+
+    /* Shift left one bit */
+    ISA_table[0x0A].opcode = opcode_ASL;
+    ISA_table[0x0A].addressing_mode = OPCODE_ADDRESSING_MODE_ACCUMULATOR;
+    ISA_table[0x06].opcode = opcode_ASL;
+    ISA_table[0x06].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE;
+    ISA_table[0x16].opcode = opcode_ASL;
+    ISA_table[0x16].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE_X_INDEXED;
+    ISA_table[0x0E].opcode = opcode_ASL;
+    ISA_table[0x0E].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE;
+    ISA_table[0x1E].opcode = opcode_ASL;
+    ISA_table[0x1E].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE_X_INDEXED;
+
+    /* Right shift one bit */
+    ISA_table[0x4A].opcode = opcode_LSR;
+    ISA_table[0x4A].addressing_mode = OPCODE_ADDRESSING_MODE_ACCUMULATOR;
+    ISA_table[0x46].opcode = opcode_LSR;
+    ISA_table[0x46].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE;
+    ISA_table[0x56].opcode = opcode_LSR;
+    ISA_table[0x56].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE_X_INDEXED;
+    ISA_table[0x4E].opcode = opcode_LSR;
+    ISA_table[0x4E].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE;
+    ISA_table[0x5E].opcode = opcode_LSR;
+    ISA_table[0x5E].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE_X_INDEXED;
+
+    /* Rotate one bit left */
+    ISA_table[0x2A].opcode = opcode_ROL;
+    ISA_table[0x2A].addressing_mode = OPCODE_ADDRESSING_MODE_ACCUMULATOR;
+    ISA_table[0x26].opcode = opcode_ROL;
+    ISA_table[0x26].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE;
+    ISA_table[0x36].opcode = opcode_ROL;
+    ISA_table[0x36].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE_X_INDEXED;
+    ISA_table[0x2E].opcode = opcode_ROL;
+    ISA_table[0x2E].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE;
+    ISA_table[0x3E].opcode = opcode_ROL;
+    ISA_table[0x3E].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE_X_INDEXED;
+
+    /* Rotate one bit right */
+    ISA_table[0x6A].opcode = opcode_ROR;
+    ISA_table[0x6A].addressing_mode = OPCODE_ADDRESSING_MODE_ACCUMULATOR;
+    ISA_table[0x66].opcode = opcode_ROR;
+    ISA_table[0x66].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE;
+    ISA_table[0x76].opcode = opcode_ROR;
+    ISA_table[0x76].addressing_mode = OPCODE_ADDRESSING_MODE_ZERO_PAGE_X_INDEXED;
+    ISA_table[0x6E].opcode = opcode_ROR;
+    ISA_table[0x6E].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE;
+    ISA_table[0x7E].opcode = opcode_ROR;
+    ISA_table[0x7E].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE_X_INDEXED;
+
+    /* Transfer Accumulator to Index X */
+    ISA_table[0xAA].opcode = opcode_TAX;
+    ISA_table[0xAA].addressing_mode = OPCODE_ADDRESSING_MODE_IMPLIED;
+
+    /* Transfer Accumulator to Index Y */
+    ISA_table[0xA8].opcode = opcode_TAY;
+    ISA_table[0xA8].addressing_mode = OPCODE_ADDRESSING_MODE_IMPLIED;
+
+    /* Transfer Index X to Accumulator */
+    ISA_table[0x8A].opcode = opcode_TXA;
+    ISA_table[0x8A].addressing_mode = OPCODE_ADDRESSING_MODE_IMPLIED;
+
+    /* Transfer Index Y to Accumulator */
+    ISA_table[0x98].opcode = opcode_TYA;
+    ISA_table[0x98].addressing_mode = OPCODE_ADDRESSING_MODE_IMPLIED;
+
+    /* Transfer stack pointer to Index X */
+    ISA_table[0xBA].opcode = opcode_TSX;
+    ISA_table[0xBA].addressing_mode = OPCODE_ADDRESSING_MODE_IMPLIED;
+
+    /* Transfer Index X to stack register */
+    ISA_table[0x9A].opcode = opcode_TXS;
+    ISA_table[0x9A].addressing_mode = OPCODE_ADDRESSING_MODE_IMPLIED;
+
+    /* Push Accumulator onto stack */
+    ISA_table[0x48].opcode = opcode_PHA;
+    ISA_table[0x48].addressing_mode = OPCODE_ADDRESSING_MODE_IMPLIED;
+
+    /* Push processor status onto stack */
+    ISA_table[0x08].opcode = opcode_PHP;
+    ISA_table[0x08].addressing_mode = OPCODE_ADDRESSING_MODE_IMPLIED;
+
+    /* Pull Accumulator from stack */
+    ISA_table[0x68].opcode = opcode_PLA;
+    ISA_table[0x68].addressing_mode = OPCODE_ADDRESSING_MODE_IMPLIED;
+
+    /* Pull processor status from stack */
+    ISA_table[0x28].opcode = opcode_PLP;
+    ISA_table[0x28].addressing_mode = OPCODE_ADDRESSING_MODE_IMPLIED;
+
+    /* Jump to new location saving return address */
+    ISA_table[0x20].opcode = opcode_JSR;
+    ISA_table[0x20].addressing_mode = OPCODE_ADDRESSING_MODE_ABSOLUTE;
+
+    /* Return from subroutine */
+    ISA_table[0x60].opcode = opcode_RTS;
+    ISA_table[0x60].addressing_mode = OPCODE_ADDRESSING_MODE_IMPLIED;
+
+    /* Return from interrupt */
+    ISA_table[0x40].opcode = opcode_RTI;
+    ISA_table[0x40].addressing_mode = OPCODE_ADDRESSING_MODE_IMPLIED;
+
+    /* Clear carry flag */
+    ISA_table[0x18].opcode = opcode_CLC;
+    ISA_table[0x18].addressing_mode = OPCODE_ADDRESSING_MODE_IMPLIED;
+
+    /* Clear decimal mode */
+    ISA_table[0xD8].opcode = opcode_CLD;
+    ISA_table[0xD8].addressing_mode = OPCODE_ADDRESSING_MODE_IMPLIED;
+
+    /* Clear interrupt disable bit */
+    ISA_table[0x58].opcode = opcode_CLI;
+    ISA_table[0x58].addressing_mode = OPCODE_ADDRESSING_MODE_IMPLIED;
+
+    /* Clear overflow bit */
+    ISA_table[0xB8].opcode = opcode_CLV;
+    ISA_table[0xB8].addressing_mode = OPCODE_ADDRESSING_MODE_IMPLIED;
+
+    /* Set carry flag */
+    ISA_table[0x38].opcode = opcode_SEC;
+    ISA_table[0x38].addressing_mode = OPCODE_ADDRESSING_MODE_IMPLIED;
+
+    /* Set decimal flag */
+    ISA_table[0xF8].opcode = opcode_SED;
+    ISA_table[0xF8].addressing_mode = OPCODE_ADDRESSING_MODE_IMPLIED;
+
+    /* Set interrupt disable status */
+    ISA_table[0x78].opcode = opcode_SEI;
+    ISA_table[0x78].addressing_mode = OPCODE_ADDRESSING_MODE_IMPLIED;
+
+    /* No operation */
+    ISA_table[0xEA].opcode = opcode_NOP;
+    ISA_table[0xEA].addressing_mode = OPCODE_ADDRESSING_MODE_IMPLIED;
+}
+
+/******************************************************************************
+ * Instruction set implementation
+ *
+ * These functions exist to wrapper the logical instruction (e.g., ADD, ROR,
+ * MOV etc) with the necessary clock steps and memory access methods to make
+ * the emulation cycle accurate. Actual op-code logic is implemented in
+ * mos6502-microcode.c which has no knowledge of the memory map beyond what is
+ * actually present in the CPU itself.
+ *****************************************************************************/
+
+int opcode_ILL(int cycle, addressing_mode_t address_mode)
+{
+    /* Halt and catch fire!! */
+    return 0;
+}
+
+int opcode_ADC(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t adl, adh, ial, bal, bah, data = 0;
+    uint8_t X, Y, c = 0;
+
+    FETCH_DATA()
+    mos6502_ADC(data);
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_AND(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t adl, adh, ial, bal, bah, data = 0;
+    uint8_t X, Y, c = 0;
+
+    FETCH_DATA()
+    mos6502_AND(data);
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_ASL(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t adl, adh, ial, bah, bal, data = 0;
+    uint8_t X, Y, c = 0;
+
+    if (OPCODE_ADDRESSING_MODE_ACCUMULATOR == address_mode) {
+        switch(cycle) {
+            case 0:
+                /* Consume clock cycle for fetching op-code */
+                return -1;
+            case 1:
+                mos6502_ASL_Accumulator();
+                /* Intentional fall-through */
+            default:
+                /* End of op-code execution */
+                break;
+        }
+        END_OPCODE()
+        return 0;
+    }
+
+    FETCH_DATA()
+    mos6502_ASL(&data);
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_BCC(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t condition, offset = 0;
+    static uint16_t addr = 0;
+
+    condition = !mos6502_get_status_flag(MOS6502_STATUS_FLAG_CARRY);
+
+    CALC_BRANCH()
+
+    mos6502_set_address_bus(mos6502_get_PC());
+    return 0;
+}
+
+int opcode_BCS(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t condition, offset = 0;
+    static uint16_t addr = 0;
+
+    condition = mos6502_get_status_flag(MOS6502_STATUS_FLAG_CARRY);
+
+    CALC_BRANCH()
+
+    mos6502_set_address_bus(mos6502_get_PC());
+    return 0;
+}
+
+int opcode_BEQ(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t condition, offset = 0;
+    static uint16_t addr = 0;
+
+    condition = mos6502_get_status_flag(MOS6502_STATUS_FLAG_ZERO);
+
+    CALC_BRANCH()
+
+    mos6502_set_address_bus(mos6502_get_PC());
+    return 0;
+}
+
+int opcode_BIT(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t adl, adh, ial, bah, bal, data = 0;
+    uint8_t X, Y, c = 0;
+
+    FETCH_DATA()
+    mos6502_BIT(data);
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_BMI(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t condition, offset = 0;
+    static uint16_t addr = 0;
+
+    condition = mos6502_get_status_flag(MOS6502_STATUS_FLAG_NEGATIVE);
+
+    CALC_BRANCH()
+
+    mos6502_set_address_bus(mos6502_get_PC());
+    return 0;
+}
+
+int opcode_BNE(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t condition, offset = 0;
+    static uint16_t addr = 0;
+
+    condition = !mos6502_get_status_flag(MOS6502_STATUS_FLAG_ZERO);
+
+    CALC_BRANCH()
+
+    mos6502_set_address_bus(mos6502_get_PC());
+    return 0;
+}
+
+int opcode_BPL(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t condition, offset = 0;
+    static uint16_t addr = 0;
+
+    condition = !mos6502_get_status_flag(MOS6502_STATUS_FLAG_NEGATIVE);
+
+    CALC_BRANCH()
+
+    mos6502_set_address_bus(mos6502_get_PC());
+    return 0;
+}
+
+int opcode_BRK(int cycle, addressing_mode_t address_mode)
+{
+    return 0;
+}
+
+int opcode_BVC(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t condition, offset = 0;
+    static uint16_t addr = 0;
+
+    condition = !mos6502_get_status_flag(MOS6502_STATUS_FLAG_OVERFLOW);
+
+    CALC_BRANCH()
+
+    mos6502_set_address_bus(mos6502_get_PC());
+    return 0;
+}
+
+int opcode_BVS(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t condition, offset = 0;
+    static uint16_t addr = 0;
+
+    condition = mos6502_get_status_flag(MOS6502_STATUS_FLAG_OVERFLOW);
+
+    CALC_BRANCH()
+
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_CLC(int cycle, addressing_mode_t address_mode)
+{
+    switch(cycle) {
+        case 0:
+            /* Consume clock cycle for fetching op-code */
+            return -1;
+        case 1:
+            mos6502_set_status_flag(MOS6502_STATUS_FLAG_CARRY, 0);
+            /* Intentional fall-through */
+        default:
+            /* End of op-code execution */
+            break;
+    }
+
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_CLD(int cycle, addressing_mode_t address_mode)
+{
+    switch(cycle) {
+        case 0:
+            /* Consume clock cycle for fetching op-code */
+            return -1;
+        case 1:
+            mos6502_set_status_flag(MOS6502_STATUS_FLAG_DECIMAL, 0);
+            /* Intentional fall-through */
+        default:
+            /* End of op-code execution */
+            break;
+    }
+
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_CLI(int cycle, addressing_mode_t address_mode)
+{
+    switch(cycle) {
+        case 0:
+            /* Consume clock cycle for fetching op-code */
+            return -1;
+        case 1:
+            mos6502_set_status_flag(MOS6502_STATUS_FLAG_INTERRUPT, 0);
+            /* Intentional fall-through */
+        default:
+            /* End of op-code execution */
+            break;
+    }
+
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_CLV(int cycle, addressing_mode_t address_mode)
+{
+    switch(cycle) {
+        case 0:
+            /* Consume clock cycle for fetching op-code */
+            return -1;
+        case 1:
+            mos6502_set_status_flag(MOS6502_STATUS_FLAG_OVERFLOW, 0);
+            /* Intentional fall-through */
+        default:
+            /* End of op-code execution */
+            break;
+    }
+
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_CMP(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t adl, adh, ial, bal, bah, data = 0;
+    uint8_t X, Y, c = 0;
+
+    FETCH_DATA()
+    mos6502_CMP(data);
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_CPX(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t adl, adh, ial, bah, bal, data = 0;
+    uint8_t X, Y, c = 0;
+
+    FETCH_DATA()
+    mos6502_CPX(data);
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_CPY(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t adl, adh, ial, bah, bal, data = 0;
+    uint8_t X, Y, c = 0;
+
+    FETCH_DATA()
+    mos6502_CPY(data);
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_DEC(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t adl, adh, ial, bah, bal, data = 0;
+    uint8_t X, Y, c = 0;
+
+    FETCH_DATA();
+    data--;
+    mos6502_set_data_bus(data);
+    memmap_write();
+    mos6502_set_status_flag(MOS6502_STATUS_FLAG_ZERO, !(data & 0xFF));
+    mos6502_set_status_flag(MOS6502_STATUS_FLAG_NEGATIVE, (data & 0x80));
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_DEX(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t value = 0;
+    switch(cycle) {
+        case 0:
+            /* Consume clock cycle for fetching op-code */
+            return -1;
+        case 1:
+            mos6502_get_register(MOS6502_REG_X, &value);
+            value--;
+            mos6502_set_register(MOS6502_REG_X, value);
+            mos6502_set_status_flag(MOS6502_STATUS_FLAG_ZERO, !(value & 0xFF));
+            mos6502_set_status_flag(MOS6502_STATUS_FLAG_NEGATIVE, (value & 0x80));
+            /* Intentional fall-through */
+        default:
+            /* End of op-code execution */
+            break;
+    }
+
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_DEY(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t value = 0;
+    switch(cycle) {
+        case 0:
+            /* Consume clock cycle for fetching op-code */
+            return -1;
+        case 1:
+            mos6502_get_register(MOS6502_REG_Y, &value);
+            value--;
+            mos6502_set_register(MOS6502_REG_Y, value);
+            mos6502_set_status_flag(MOS6502_STATUS_FLAG_ZERO, !(value & 0xFF));
+            mos6502_set_status_flag(MOS6502_STATUS_FLAG_NEGATIVE, (value & 0x80));
+            /* Intentional fall-through */
+        default:
+            /* End of op-code execution */
+            break;
+    }
+
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_EOR(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t adl, adh, ial, bah, bal, data = 0;
+    uint8_t X, Y, c = 0;
+
+    FETCH_DATA()
+    mos6502_EOR(data);
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_INC(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t adl, adh, ial, bah, bal, data = 0;
+    uint8_t X, Y, c = 0;
+
+    FETCH_DATA();
+    data++;
+    mos6502_set_data_bus(data);
+    memmap_write();
+    mos6502_set_status_flag(MOS6502_STATUS_FLAG_ZERO, !(data & 0xFF));
+    mos6502_set_status_flag(MOS6502_STATUS_FLAG_NEGATIVE, (data & 0x80));
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_INX(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t value = 0;
+    switch(cycle) {
+        case 0:
+            /* Consume clock cycle for fetching op-code */
+            return -1;
+        case 1:
+            mos6502_get_register(MOS6502_REG_X, &value);
+            value++;
+            mos6502_set_register(MOS6502_REG_X, value);
+            mos6502_set_status_flag(MOS6502_STATUS_FLAG_ZERO, !(value & 0xFF));
+            mos6502_set_status_flag(MOS6502_STATUS_FLAG_NEGATIVE, (value & 0x80));
+            /* Intentional fall-through */
+        default:
+            /* End of op-code execution */
+            break;
+    }
+
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_INY(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t value = 0;
+    switch(cycle) {
+        case 0:
+            /* Consume clock cycle for fetching op-code */
+            return -1;
+        case 1:
+            mos6502_get_register(MOS6502_REG_Y, &value);
+            value++;
+            mos6502_set_register(MOS6502_REG_Y, value);
+            mos6502_set_status_flag(MOS6502_STATUS_FLAG_ZERO, !(value & 0xFF));
+            mos6502_set_status_flag(MOS6502_STATUS_FLAG_NEGATIVE, (value & 0x80));
+            /* Intentional fall-through */
+        default:
+            /* End of op-code execution */
+            break;
+    }
+
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_JMP(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t adl, adh = 0;
+    switch(cycle) {
+        case 0:
+            /* Consume clock cycle for fetching op-code */
+            return -1;
+        case 1:
+            mos6502_increment_PC();
+            mos6502_set_address_bus(mos6502_get_PC());
+            memmap_read(&adl);
+            return -1;
+        case 2:
+            mos6502_increment_PC();
+            mos6502_set_address_bus(mos6502_get_PC());
+            memmap_read(&adh);
+            return -1;
+            /* Intentional fall-through */
+        default:
+            /* End of op-code execution */
+            break;
+    }
+
+    mos6502_set_address_bus_hl(adh, adl);
+    return 0;
+}
+
+int opcode_JSR(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t adl, adh, pcl, pch, S = 0;
+    uint16_t address = 0;
+
+    switch(cycle) {
+        case 0:
+            /* Consume clock cycle for fetching op-code */
+            return -1;
+        case 1:
+            mos6502_increment_PC();
+            mos6502_set_address_bus(mos6502_get_PC());
+            memmap_read(&adl);
+            return -1;
+        case 2:
+            mos6502_get_register(MOS6502_REG_S, &S);
+            mos6502_set_address_bus_hl(STACK_PAGE, S);
+            return -1;
+        case 3:
+            pch = (uint8_t)(mos6502_get_PC() >> 8);
+            mos6502_set_data_bus(pch);
+            memmap_write();
+            return -1;
+        case 4:
+            pcl = (uint8_t)mos6502_get_PC();
+            mos6502_set_address_bus_hl(STACK_PAGE, S-1);
+            mos6502_set_data_bus(pcl);
+            memmap_write();
+            return -1;
+        case 5:
+            mos6502_increment_PC();
+            mos6502_set_address_bus(mos6502_get_PC());
+            memmap_read(&adh);
+            /* Intentional fall-through */
+        default:
+            /* End of op-code execution */
+            break;
+    }
+    address = (adh << 8) | adl;
+    mos6502_set_address_bus(address);
+    mos6502_set_PC(address);
+    return 0;
+}
+
+int opcode_LDA(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t adl, adh, ial, bah, bal, data = 0;
+    uint8_t X, Y, c = 0;
+
+    FETCH_DATA()
+    mos6502_set_register(MOS6502_REG_A, data);
+    mos6502_set_status_flag(MOS6502_STATUS_FLAG_ZERO, !(data & 0xFF));
+    mos6502_set_status_flag(MOS6502_STATUS_FLAG_NEGATIVE, (data & 0x80));
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_LDX(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t adl, adh, ial, bah, bal, data = 0;
+    uint8_t X, Y, c = 0;
+
+    FETCH_DATA()
+    mos6502_set_register(MOS6502_REG_X, data);
+    mos6502_set_status_flag(MOS6502_STATUS_FLAG_ZERO, !(data & 0xFF));
+    mos6502_set_status_flag(MOS6502_STATUS_FLAG_NEGATIVE, (data & 0x80));
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_LDY(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t adl, adh, ial, bah, bal, data = 0;
+    uint8_t X, Y, c = 0;
+
+    FETCH_DATA()
+    mos6502_set_register(MOS6502_REG_Y, data);
+    mos6502_set_status_flag(MOS6502_STATUS_FLAG_ZERO, !(data & 0xFF));
+    mos6502_set_status_flag(MOS6502_STATUS_FLAG_NEGATIVE, (data & 0x80));
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_LSR(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t adl, adh, ial, bah, bal, data = 0;
+    uint8_t X, Y, c = 0;
+
+    if (OPCODE_ADDRESSING_MODE_ACCUMULATOR == address_mode) {
+        switch(cycle) {
+            case 0:
+                /* Consume clock cycle for fetching op-code */
+                return -1;
+            case 1:
+                mos6502_LSR_Accumulator();
+                /* Intentional fall-through */
+            default:
+                /* End of op-code execution */
+                break;
+        }
+        END_OPCODE()
+        return 0;
+    }
+
+    FETCH_DATA()
+    mos6502_LSR(&data);
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_NOP(int cycle, addressing_mode_t address_mode)
+{
+    switch(cycle) {
+        case 0:
+            /* Consume clock cycle for fetching op-code */
+            return -1;
+        case 1: ;
+            /* Intentional fall-through */
+        default:
+            /* End of op-code execution */
+            break;
+    }
+    END_OPCODE()
+    return 0;
+}
+
+
+int opcode_ORA(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t adl, adh, ial, bal, bah, data = 0;
+    uint8_t X, Y, c = 0;
+
+    FETCH_DATA()
+    mos6502_ORA(&data);
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_PHA(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t value, destination = 0;
+    switch(cycle) {
+        case 0:
+            /* Consume clock cycle for fetching op-code */
+            return -1;
+        case 1:
+            /* Consume another clock cycle incrementing PC */
+            mos6502_increment_PC();
+            mos6502_set_address_bus(mos6502_get_PC());
+            return -1;
+        case 2:
+            /* Fetch value of Accumulator register and stack pointer */
+            mos6502_get_register(MOS6502_REG_A, &value);
+            mos6502_get_register(MOS6502_REG_S, &destination);
+            /* Write status register value to stack address */
+            mos6502_set_address_bus_hl(STACK_PAGE, destination);
+            mos6502_set_data_bus(value);
+            memmap_write();
+            /* Intentional fall-through */
+        default:
+            /* End of op-code execution */
+            break;
+    }
+    END_OPCODE();
+    return 0;
+}
+
+int opcode_PHP(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t value, destination = 0;
+    switch(cycle) {
+        case 0:
+            /* Consume clock cycle for fetching op-code */
+            return -1;
+        case 1:
+            /* Consume another clock cycle incrementing PC */
+            mos6502_increment_PC();
+            mos6502_set_address_bus(mos6502_get_PC());
+            return -1;
+        case 2:
+            /* Fetch value of status register and stack pointer */
+            mos6502_get_register(MOS6502_REG_P, &value);
+            mos6502_get_register(MOS6502_REG_S, &destination);
+            /* Write status register value to stack address */
+            mos6502_set_address_bus_hl(STACK_PAGE, destination);
+            mos6502_set_data_bus(value);
+            memmap_write();
+            /* Intentional fall-through */
+        default:
+            /* End of op-code execution */
+            break;
+    }
+    END_OPCODE();
+    return 0;
+}
+
+int opcode_PLA(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t value, source = 0;
+    switch(cycle) {
+        case 0:
+            /* Consume clock cycle for fetching op-code */
+            return -1;
+        case 1:
+            /* Consume another clock cycle incrementing PC */
+            mos6502_increment_PC();
+            mos6502_set_address_bus(mos6502_get_PC());
+            return -1;
+        case 2:
+            mos6502_get_register(MOS6502_REG_S, &source);
+            mos6502_set_address_bus_hl(STACK_PAGE, source);
+            return -1;
+        case 3:
+            source++;
+            mos6502_set_address_bus_hl(STACK_PAGE, source);
+            memmap_read(&value);
+            mos6502_set_register(MOS6502_REG_A, value);
+            /* Intentional fall-through */
+        default:
+            /* End of op-code execution */
+            break;
+    }
+
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_PLP(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t value, source = 0;
+    switch(cycle) {
+        case 0:
+            /* Consume clock cycle for fetching op-code */
+            return -1;
+        case 1:
+            /* Consume another clock cycle incrementing PC */
+            mos6502_increment_PC();
+            mos6502_set_address_bus(mos6502_get_PC());
+            return -1;
+        case 2:
+            mos6502_get_register(MOS6502_REG_S, &source);
+            mos6502_set_address_bus_hl(STACK_PAGE, source);
+            return -1;
+        case 3:
+            source++;
+            mos6502_set_address_bus_hl(STACK_PAGE, source);
+            memmap_read(&value);
+            mos6502_set_register(MOS6502_REG_P, value);
+            /* Intentional fall-through */
+        default:
+            /* End of op-code execution */
+            break;
+    }
+
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_ROL(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t adl, adh, ial, bal, bah, data = 0;
+    uint8_t X, Y, c = 0;
+
+    if (OPCODE_ADDRESSING_MODE_ACCUMULATOR == address_mode) {
+        switch(cycle) {
+            case 0:
+                /* Consume clock cycle for fetching op-code */
+                return -1;
+            case 1:
+                mos6502_ROL_Accumulator();
+                /* Intentional fall-through */
+            default:
+                /* End of op-code execution */
+                break;
+        }
+        END_OPCODE()
+        return 0;
+    }
+
+    FETCH_DATA()
+    mos6502_ROL(&data);
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_ROR(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t adl, adh, ial, bah, bal, data = 0;
+    uint8_t X, Y, c = 0;
+
+    if (OPCODE_ADDRESSING_MODE_ACCUMULATOR == address_mode) {
+        switch(cycle) {
+            case 0:
+                /* Consume clock cycle for fetching op-code */
+                return -1;
+            case 1:
+                mos6502_ROR_Accumulator();
+                /* Intentional fall-through */
+            default:
+                /* End of op-code execution */
+                break;
+        }
+        END_OPCODE()
+        return 0;
+    }
+
+    FETCH_DATA()
+    mos6502_ROR(&data);
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_RTI(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t pcl, pch, S, nuS = 0;
+
+    switch(cycle) {
+        case 0:
+            /* Consume clock cycle for fetching op-code */
+            return -1;
+        case 1:
+            mos6502_increment_PC();
+            return -1;
+        case 2:
+            mos6502_get_register(MOS6502_REG_S, &S);
+            mos6502_set_address_bus_hl(STACK_PAGE, S);
+            return -1;
+        case 3:
+            mos6502_set_address_bus_hl(STACK_PAGE, S+1);
+            memmap_read(&nuS);
+            mos6502_set_register(MOS6502_REG_S, nuS);
+            return -1;
+        case 4:
+            mos6502_set_address_bus_hl(STACK_PAGE, S+2);
+            memmap_read(&pcl);
+            return -1;
+        case 5:
+            mos6502_set_address_bus_hl(STACK_PAGE, S+3);
+            memmap_read(&pcl);
+            return -1;
+        case 6:
+            mos6502_set_address_bus_hl(pch, pcl);
+            /* Intentional fall-through */
+        default:
+            /* End of op-code execution */
+            break;
+    }    END_OPCODE()
+    return 0;
+}
+
+int opcode_RTS(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t pcl, pch, S = 0;
+
+    switch(cycle) {
+        case 0:
+            /* Consume clock cycle for fetching op-code */
+            return -1;
+        case 1:
+            mos6502_increment_PC();
+            return -1;
+        case 2:
+            mos6502_get_register(MOS6502_REG_S, &S);
+            mos6502_set_address_bus_hl(STACK_PAGE, S);
+            return -1;
+        case 3:
+            mos6502_set_address_bus_hl(STACK_PAGE, S+1);
+            memmap_read(&pcl);
+            return -1;
+        case 4:
+            mos6502_set_address_bus_hl(STACK_PAGE, S+2);
+            memmap_read(&pcl);
+            return -1;
+        case 5:
+            mos6502_set_address_bus_hl(pch, pcl);
+            /* Intentional fall-through */
+        default:
+            /* End of op-code execution */
+            break;
+    }
+
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_SBC(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t adl, adh, ial, bal, bah, data = 0;
+    uint8_t X, Y, c = 0;
+
+    FETCH_DATA()
+    mos6502_SBC(data);
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_SEC(int cycle, addressing_mode_t address_mode)
+{
+    switch(cycle) {
+        case 0:
+            /* Consume clock cycle for fetching op-code */
+            return -1;
+        case 1:
+            mos6502_set_status_flag(MOS6502_STATUS_FLAG_CARRY, 1);
+            /* Intentional fall-through */
+        default:
+            /* End of op-code execution */
+            break;
+    }
+
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_SED(int cycle, addressing_mode_t address_mode)
+{
+    switch(cycle) {
+        case 0:
+            /* Consume clock cycle for fetching op-code */
+            return -1;
+        case 1:
+            mos6502_set_status_flag(MOS6502_STATUS_FLAG_DECIMAL, 1);
+            /* Intentional fall-through */
+        default:
+            /* End of op-code execution */
+            break;
+    }
+
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_SEI(int cycle, addressing_mode_t address_mode)
+{
+    switch(cycle) {
+        case 0:
+            /* Consume clock cycle for fetching op-code */
+            return -1;
+        case 1:
+            mos6502_set_status_flag(MOS6502_STATUS_FLAG_INTERRUPT, 1);
+            /* Intentional fall-through */
+        default:
+            /* End of op-code execution */
+            break;
+    }
+
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_STA(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t adl, adh, bah, bal, data = 0;
+    uint8_t X, Y, c = 0;
+
+    FETCH_STORE_ADDRESS()
+    mos6502_get_register(MOS6502_REG_A, &data);
+    mos6502_set_data_bus(data);
+    memmap_write();
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_STX(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t adl, adh, bah, bal, data = 0;
+    uint8_t X, Y, c = 0;
+
+    FETCH_STORE_ADDRESS()
+    mos6502_get_register(MOS6502_REG_X, &data);
+    mos6502_set_data_bus(data);
+    memmap_write();
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_STY(int cycle, addressing_mode_t address_mode)
+{
+    static uint8_t adl, adh, bah, bal, data = 0;
+    uint8_t X, Y, c = 0;
+
+    FETCH_STORE_ADDRESS()
+    mos6502_get_register(MOS6502_REG_Y, &data);
+    mos6502_set_data_bus(data);
+    memmap_write();
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_TAX(int cycle, addressing_mode_t address_mode)
+{
+    uint8_t value = 0;
+    switch(cycle) {
+        case 0:
+            /* Consume clock cycle for fetching op-code */
+            return -1;
+        case 1:
+            mos6502_get_register(MOS6502_REG_A, &value);
+            mos6502_set_register(MOS6502_REG_X, value);
+            mos6502_set_status_flag(MOS6502_STATUS_FLAG_ZERO, !(value & 0xFF));
+            mos6502_set_status_flag(MOS6502_STATUS_FLAG_NEGATIVE, (value & 0x80));
+            /* Intentional fall-through */
+        default:
+            /* End of op-code execution */
+            break;
+    }
+
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_TAY(int cycle, addressing_mode_t address_mode)
+{
+    uint8_t value = 0;
+    switch(cycle) {
+        case 0:
+            /* Consume clock cycle for fetching op-code */
+            return -1;
+        case 1:
+            mos6502_get_register(MOS6502_REG_A, &value);
+            mos6502_set_register(MOS6502_REG_Y, value);
+            mos6502_set_status_flag(MOS6502_STATUS_FLAG_ZERO, !(value & 0xFF));
+            mos6502_set_status_flag(MOS6502_STATUS_FLAG_NEGATIVE, (value & 0x80));
+            /* Intentional fall-through */
+        default:
+            /* End of op-code execution */
+            break;
+    }
+
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_TSX(int cycle, addressing_mode_t address_mode)
+{
+    uint8_t value = 0;
+    switch(cycle) {
+        case 0:
+            /* Consume clock cycle for fetching op-code */
+            return -1;
+        case 1:
+            mos6502_get_register(MOS6502_REG_S, &value);
+            mos6502_set_register(MOS6502_REG_X, value);
+            /* Intentional fall-through */
+        default:
+            /* End of op-code execution */
+            break;
+    }
+
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_TXA(int cycle, addressing_mode_t address_mode)
+{
+    uint8_t value = 0;
+    switch(cycle) {
+        case 0:
+            /* Consume clock cycle for fetching op-code */
+            return -1;
+        case 1:
+            mos6502_get_register(MOS6502_REG_X, &value);
+            mos6502_set_register(MOS6502_REG_A, value);
+            mos6502_set_status_flag(MOS6502_STATUS_FLAG_ZERO, !(value & 0xFF));
+            mos6502_set_status_flag(MOS6502_STATUS_FLAG_NEGATIVE, (value & 0x80));
+            /* Intentional fall-through */
+        default:
+            /* End of op-code execution */
+            break;
+    }
+
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_TXS(int cycle, addressing_mode_t address_mode)
+{
+    uint8_t value = 0;
+    switch(cycle) {
+        case 0:
+            /* Consume clock cycle for fetching op-code */
+            return -1;
+        case 1:
+            mos6502_get_register(MOS6502_REG_X, &value);
+            mos6502_set_register(MOS6502_REG_S, value);
+            /* Intentional fall-through */
+        default:
+            /* End of op-code execution */
+            break;
+    }
+
+    END_OPCODE()
+    return 0;
+}
+
+int opcode_TYA(int cycle, addressing_mode_t address_mode)
+{
+    uint8_t value = 0;
+    switch(cycle) {
+        case 0:
+            /* Consume clock cycle for fetching op-code */
+            return -1;
+        case 1:
+            mos6502_get_register(MOS6502_REG_Y, &value);
+            mos6502_set_register(MOS6502_REG_A, value);
+            mos6502_set_status_flag(MOS6502_STATUS_FLAG_ZERO, !(value & 0xFF));
+            mos6502_set_status_flag(MOS6502_STATUS_FLAG_NEGATIVE, (value & 0x80));
+            /* Intentional fall-through */
+        default:
+            /* End of op-code execution */
+            break;
+    }
+
+    END_OPCODE()
+    return 0;
+}
+
