@@ -1,9 +1,9 @@
 /*
- * File: Atari-cart.c
+ * File: program.c
  * Author: dgrubb
  * Date: 07/07/2017
  *
- * Mimics ROM space (that is, a game program).
+ * Mimics ROM space (E.g., a game program).
  */
 
 #include "program.h"

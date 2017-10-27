@@ -1,5 +1,5 @@
 /*
- * File: Atari-memmap.h
+ * File: memmap.h
  * Author: dgrubb
  * Date: 06/28/2017
  *
