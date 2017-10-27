@@ -1,8 +1,8 @@
 # STM32-RIOT-2600
 
-This project is a 6502 emulator specifically targeted at the STM32-F446 microcontroller. Also included is a partial simulation of the MOS6532 (as used in the Atari 2600) to provide a small amount of RAM for executing programs.
+This project is a 6502 emulator specifically targeted at the STM32-F446 microcontroller, in particular using the [Nucleo-F446RE board](http://www.st.com/en/evaluation-tools/nucleo-f446re.html "Nucleo F446RE board"). Also included is a partial simulation of the MOS6532 (as used in the Atari 2600) to provide a small amount of RAM for executing programs.
 
-The RIOT OS is used for configuring peripherals and managing device timing.
+The [RIOT OS](https://riot-os.org "RIOT OS") is used for configuring peripherals and managing device timing.
 
 ## Prerequisites
 
@@ -43,5 +43,8 @@ $ make flash
 $ make debug
 ```
 
-A serial terminal will be available on (usually, your node may vary) /dev/ttyACM0.
+A serial terminal will be available on (usually, your node may vary) /dev/ttyACM0:
 
+```
+$ screen /dev/ttyACM0 115200
+```
